@@ -744,6 +744,10 @@ func (s *SQLStore) PutManyRedactedPhones(ctx context.Context, entries []store.Re
 	return nil
 }
 
+// contactCacheMaxSize bounds the in-memory contact cache. Contacts live in the database, so when the
+// cache fills up it's simply dropped and rebuilt on demand instead of growing with every contact ever seen.
+const contactCacheMaxSize = 2000
+
 func (s *SQLStore) getContact(ctx context.Context, user types.JID) (*types.ContactInfo, error) {
 	cached, ok := s.contactCache[user]
 	if ok {
@@ -762,6 +766,9 @@ func (s *SQLStore) getContact(ctx context.Context, user types.JID) (*types.Conta
 		PushName:      push.String,
 		BusinessName:  business.String,
 		RedactedPhone: redactedPhone.String,
+	}
+	if len(s.contactCache) >= contactCacheMaxSize {
+		clear(s.contactCache)
 	}
 	s.contactCache[user] = info
 	return info, nil
@@ -808,7 +815,6 @@ func (s *SQLStore) GetAllContacts(ctx context.Context) (map[types.JID]types.Cont
 	output := make(map[types.JID]types.ContactInfo, len(s.contactCache))
 	err := convertContactRow.NewRowIter(s.db.Query(ctx, getAllContactsQuery, s.JID)).Iter(func(tuple *contactTuple) (bool, error) {
 		output[tuple.JID] = *tuple.Info
-		s.contactCache[tuple.JID] = tuple.Info
 		return true, nil
 	})
 	return output, err

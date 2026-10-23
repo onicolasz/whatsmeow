@@ -58,6 +58,8 @@ type wrappedEventHandler struct {
 type deviceCache struct {
 	devices []types.JID
 	dhash   string
+	// lastUsed is refreshed on reads, zero means not read since written (see unlockedCleanupUserDevicesCache)
+	lastUsed time.Time
 }
 
 // Client contains everything necessary to connect to and interact with the WhatsApp web API.
@@ -125,15 +127,18 @@ type Client struct {
 	eventHandlers     []wrappedEventHandler
 	eventHandlersLock sync.RWMutex
 
-	messageRetries     map[string]int
-	messageRetriesLock sync.Mutex
-	retrySema          *semaphore.Weighted
+	messageRetries          map[string]int
+	messageRetriesLock      sync.Mutex
+	lastMessageRetriesReset time.Time
+	retrySema               *semaphore.Weighted
 
-	incomingRetryRequestCounter     map[incomingRetryKey]int
-	incomingRetryRequestCounterLock sync.Mutex
+	incomingRetryRequestCounter          map[incomingRetryKey]int
+	incomingRetryRequestCounterLock      sync.Mutex
+	lastIncomingRetryRequestCounterReset time.Time
 
-	appStateKeyRequests     map[string]time.Time
-	appStateKeyRequestsLock sync.RWMutex
+	appStateKeyRequests            map[string]time.Time
+	appStateKeyRequestsLock        sync.RWMutex
+	lastAppStateKeyRequestsCleanup time.Time
 
 	messageSendLock sync.Mutex
 
@@ -145,18 +150,21 @@ type Client struct {
 
 	privacySettingsCache atomic.Value
 
-	groupCache           map[types.JID]*groupMetaCache
-	groupCacheLock       sync.Mutex
-	userDevicesCache     map[types.JID]deviceCache
-	userDevicesCacheLock sync.Mutex
+	groupCache                  map[types.JID]*groupMetaCache
+	groupCacheLock              sync.Mutex
+	lastGroupCacheCleanup       time.Time
+	userDevicesCache            map[types.JID]deviceCache
+	userDevicesCacheLock        sync.Mutex
+	lastUserDevicesCacheCleanup time.Time
 
 	recentMessagesMap  map[recentMessageKey]RecentMessage
 	recentMessagesList [recentMessagesSize]recentMessageKey
 	recentMessagesPtr  int
 	recentMessagesLock sync.RWMutex
 
-	sessionRecreateHistory     map[types.JID]time.Time
-	sessionRecreateHistoryLock sync.Mutex
+	sessionRecreateHistory            map[types.JID]time.Time
+	sessionRecreateHistoryLock        sync.Mutex
+	lastSessionRecreateHistoryCleanup time.Time
 	// GetMessageForRetry is used to find the source message for handling retry receipts
 	// when the message is not found in the recently sent message cache.
 	// Note: in DMs, the "to" field may be different from what you originally sent to (LID vs phone number),
@@ -223,6 +231,9 @@ type groupMetaCache struct {
 	ReadOnly                   bool
 	Members                    []types.JID
 	Admins                     []types.JID
+
+	// lastUsed is refreshed on reads, zero means not read since cached (see unlockedCleanupGroupCache)
+	lastUsed time.Time
 }
 
 func (gmc *groupMetaCache) CanSend(sender types.JID, message *waE2E.Message) bool {

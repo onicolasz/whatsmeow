@@ -162,6 +162,7 @@ const recreateSessionTimeout = 1 * time.Hour
 func (cli *Client) shouldRecreateSession(ctx context.Context, retryCount int, jid types.JID) (reason string, recreate bool) {
 	cli.sessionRecreateHistoryLock.Lock()
 	defer cli.sessionRecreateHistoryLock.Unlock()
+	cli.unlockedCleanupSessionRecreateHistory()
 	if contains, err := cli.Store.ContainsSession(ctx, jid.SignalAddress()); err != nil {
 		session, err := cli.Store.LoadSession(ctx, jid.SignalAddress())
 		if err != nil {
@@ -253,6 +254,7 @@ func (cli *Client) handleRetryReceipt(ctx context.Context, receipt *events.Recei
 
 	retryKey := incomingRetryKey{receipt.Sender, messageID}
 	cli.incomingRetryRequestCounterLock.Lock()
+	cli.unlockedResetIncomingRetryRequestCounter()
 	cli.incomingRetryRequestCounter[retryKey]++
 	internalCounter := cli.incomingRetryRequestCounter[retryKey]
 	cli.incomingRetryRequestCounterLock.Unlock()
@@ -495,6 +497,7 @@ func (cli *Client) sendRetryReceipt(ctx context.Context, node *waBinary.Node, in
 	}
 
 	cli.messageRetriesLock.Lock()
+	cli.unlockedResetMessageRetries()
 	cli.messageRetries[id]++
 	retryCount := cli.messageRetries[id]
 	// In case the message is a retry response, and we restarted in between, find the count from the message

@@ -495,6 +495,7 @@ func (cli *Client) fetchAppStatePatches(ctx context.Context, name appstate.WAPat
 
 func (cli *Client) requestMissingAppStateKeys(ctx context.Context, patches *appstate.PatchList) {
 	cli.appStateKeyRequestsLock.Lock()
+	cli.unlockedCleanupAppStateKeyRequests()
 	rawKeyIDs := cli.appStateProc.GetMissingKeyIDs(ctx, patches)
 	filteredKeyIDs := make([][]byte, 0, len(rawKeyIDs))
 	now := time.Now()

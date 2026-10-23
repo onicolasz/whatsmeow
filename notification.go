@@ -116,6 +116,7 @@ func (cli *Client) handlePictureNotification(ctx context.Context, node *waBinary
 func (cli *Client) handleDeviceNotification(ctx context.Context, node *waBinary.Node) {
 	cli.userDevicesCacheLock.Lock()
 	defer cli.userDevicesCacheLock.Unlock()
+	cli.unlockedCleanupUserDevicesCache()
 	ag := node.AttrGetter()
 	from := ag.JID("from")
 	fromLID := ag.OptionalJID("lid")

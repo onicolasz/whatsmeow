@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"go.mau.fi/util/exslices"
 
@@ -738,6 +739,7 @@ func (cli *Client) cacheGroupInfo(groupInfo *types.GroupInfo, lock bool) ([]stor
 		cli.groupCacheLock.Lock()
 		defer cli.groupCacheLock.Unlock()
 	}
+	cli.unlockedCleanupGroupCache()
 	cli.groupCache[groupInfo.JID] = &groupMetaCache{
 		AddressingMode:             groupInfo.AddressingMode,
 		ReadOnly:                   groupInfo.IsAnnounce,
@@ -785,6 +787,7 @@ func (cli *Client) getCachedGroupData(ctx context.Context, jid types.JID) (*grou
 	cli.groupCacheLock.Lock()
 	defer cli.groupCacheLock.Unlock()
 	if val, ok := cli.groupCache[jid]; ok {
+		val.lastUsed = time.Now()
 		return val, nil
 	}
 	_, err := cli.getGroupInfo(ctx, jid, false)

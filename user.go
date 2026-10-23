@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -482,11 +483,15 @@ func (cli *Client) GetUserDevices(ctx context.Context, jids []types.JID) ([]type
 	}
 	cli.userDevicesCacheLock.Lock()
 	defer cli.userDevicesCacheLock.Unlock()
+	cli.unlockedCleanupUserDevicesCache()
 
+	now := time.Now()
 	var devices, jidsToSync, fbJIDsToSync []types.JID
 	for _, jid := range jids {
 		cached, ok := cli.userDevicesCache[jid]
 		if ok && len(cached.devices) > 0 {
+			cached.lastUsed = now
+			cli.userDevicesCache[jid] = cached
 			devices = append(devices, cached.devices...)
 		} else if jid.Server == types.MessengerServer {
 			fbJIDsToSync = append(fbJIDsToSync, jid)

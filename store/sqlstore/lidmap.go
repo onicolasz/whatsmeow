@@ -35,6 +35,21 @@ type CachedLIDMap struct {
 
 var _ store.LIDStore = (*CachedLIDMap)(nil)
 
+// lidCacheMaxSize bounds each direction of the LID<->PN cache. The mappings live in the database, so when
+// the cache fills up it's dropped and rebuilt on demand. A filled cache (FillCache) is never dropped,
+// because lookups trust it to be complete.
+const lidCacheMaxSize = 5000
+
+// unlockedLimitCacheSize must be called with lidCacheLock held (write lock).
+// The maps are cleared in place rather than replaced, because getLIDMapping receives them as arguments.
+func (s *CachedLIDMap) unlockedLimitCacheSize() {
+	if s.cacheFilled || (len(s.pnToLIDCache) < lidCacheMaxSize && len(s.lidToPNCache) < lidCacheMaxSize) {
+		return
+	}
+	clear(s.pnToLIDCache)
+	clear(s.lidToPNCache)
+}
+
 func NewCachedLIDMap(db *dbutil.Database) *CachedLIDMap {
 	return &CachedLIDMap{
 		db: db,
@@ -101,6 +116,7 @@ func (s *CachedLIDMap) getLIDMapping(ctx context.Context, source types.JID, targ
 	}
 	s.lidCacheLock.Lock()
 	defer s.lidCacheLock.Unlock()
+	s.unlockedLimitCacheSize()
 	err := s.db.QueryRow(ctx, query, source.User).Scan(&targetUser)
 	if errors.Is(err, sql.ErrNoRows) {
 		// continue with empty result
@@ -164,6 +180,7 @@ func (s *CachedLIDMap) GetManyLIDsForPNs(ctx context.Context, pns []types.JID) (
 
 	s.lidCacheLock.Lock()
 	defer s.lidCacheLock.Unlock()
+	s.unlockedLimitCacheSize()
 
 	var res dbutil.RowIter[store.LIDMapping]
 	if s.db.Dialect == dbutil.Postgres && PostgresArrayWrapper != nil {
@@ -253,6 +270,7 @@ func (s *CachedLIDMap) unlockedPutLIDMapping(ctx context.Context, lid, pn types.
 	if err != nil {
 		return err
 	}
+	s.unlockedLimitCacheSize()
 	oldLID := s.pnToLIDCache[pn.User]
 	oldPN := s.lidToPNCache[lid.User]
 	s.pnToLIDCache[pn.User] = lid.User
